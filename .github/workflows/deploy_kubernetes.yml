@@ -1,0 +1,210 @@
+name: Generate Kubernetes manifests
+
+on:
+  push:
+    paths:
+      - 'helm/**'
+      - 'terraform/deployment/**'
+      - '.github/workflows/deploy_kubernetes.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to generate manifests for'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prd
+      applyTF:
+        description: 'Apply Terraform?'
+        required: true
+        type: boolean
+      version:
+        description: 'Image tag to deploy (defaults to latest tag in ACR)'
+        required: false
+        default: 'latest'
+        type: string
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  generate-dev:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+    runs-on: ubuntu-latest
+    name: Generate DEV manifests
+    environment: dev
+
+    env:
+      ARM_CLIENT_ID: "${{ secrets.ASGERTHYREGODDK_DEV_CLIENT_ID }}"
+      ARM_SUBSCRIPTION_ID: "${{ secrets.ASGERTHYREGODDK_DEV_SUBSCRIPTION_ID }}"
+      ARM_TENANT_ID: "${{ secrets.ASGERTHYREGODDK_DEV_TENANT_ID }}"
+      ARM_USE_AZUREAD: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: asgerthyregoddk
+
+      - name: Checkout ArgoCD repo
+        uses: actions/checkout@v4
+        with:
+          repository: aatrisgn/TGC.ArgoCD
+          token: ${{ secrets.TESTING }}
+          path: argocd
+      
+      - name: Install Terraform
+        run: bash "${{ github.workspace }}/asgerthyregoddk/.github/scripts/install_terraform.sh" 
+
+      - name: 'Az CLI login'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.ASGERTHYREGODDK_DEV_CLIENT_ID }}
+          tenant-id: ${{ secrets.ASGERTHYREGODDK_DEV_TENANT_ID }}
+          subscription-id: ${{ secrets.ASGERTHYREGODDK_DEV_SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+
+      - name: Resolve image tag
+        id: resolve_tag
+        uses: azure/powershell@v3
+        with:
+          azPSVersion: latest
+          inlineScript: |
+            ./asgerthyregoddk/.github/scripts/fetch_latest_image_version.ps1 `
+              -acrUrl "tgclzdevacr.azurecr.io" `
+              -imageName "tgc-atdk-app" `
+              -inputTag "${{ github.event.inputs.version || 'latest' }}"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+
+      - name: Render manifests
+        run: |
+          helm template backend ./helm \
+            -f ./helm/values-dev.yaml \
+            --set image.tag=${{ steps.resolve_tag.outputs.IMAGE_TAG }} \
+            --output-dir ./deployment/dev
+        working-directory: asgerthyregoddk
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+          -backend-config=resource_group_name="${{ secrets.ASGERTHYREGODDK_DEV_TFSTATE_RESOURCE_GROUP_NAME }}" \
+          -backend-config=storage_account_name="${{ secrets.ASGERTHYREGODDK_DEV_TFSTATE_STORAGE_ACCOUNT_NAME }}" \
+          -backend-config=container_name="${{ secrets.ASGERTHYREGODDK_DEV_TFSTATE_STORAGE_CONTAINER_NAME }}" \
+          -backend-config=key="asgerthyregoddk.deployment.dev"
+        working-directory: asgerthyregoddk/terraform/deployment
+          
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: asgerthyregoddk/terraform/deployment
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -input=false -var-file="envs/vars.dev.tfvars" -out=tfplan
+        working-directory: asgerthyregoddk/terraform/deployment
+
+      - name: Terraform Apply
+        if: github.event.inputs.applyTF == 'true'
+        run: terraform apply -auto-approve tfplan
+        working-directory: asgerthyregoddk/terraform/deployment
+
+      - name: Commit rendered manifests
+        run: |
+          cd argocd && git pull
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add .
+          git diff --cached --quiet || git commit -m "[TGC.AsgerThyregodDK] chore: render dev manifests [${{ steps.resolve_tag.outputs.IMAGE_TAG }}]"
+          git push
+
+  generate-prd:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.environment == 'prd'
+    runs-on: ubuntu-latest
+    name: Generate PRD manifests
+    environment: dev
+    env:
+      ARM_CLIENT_ID: "${{ secrets.ASGERTHYREGODDK_DEV_CLIENT_ID }}"
+      ARM_SUBSCRIPTION_ID: "${{ secrets.ASGERTHYREGODDK_DEV_SUBSCRIPTION_ID }}"
+      ARM_TENANT_ID: "${{ secrets.ASGERTHYREGODDK_DEV_TENANT_ID }}"
+      ARM_USE_AZUREAD: true
+
+    steps:
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+      - uses: actions/checkout@v4
+        with:
+          path: asgerthyregoddk
+
+      - name: Checkout ArgoCD repo
+        uses: actions/checkout@v4
+        with:
+          repository: aatrisgn/TGC.ArgoCD
+          token: ${{ secrets.TESTING }}
+          path: argocd
+
+      - name: Install Terraform
+        run: bash "${{ github.workspace }}/asgerthyregoddk/.github/scripts/install_terraform.sh" 
+
+      - name: Az CLI login
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.ASGERTHYREGODDK_DEV_CLIENT_ID }}
+          tenant-id: ${{ secrets.ASGERTHYREGODDK_DEV_TENANT_ID }}
+          subscription-id: ${{ secrets.ASGERTHYREGODDK_DEV_SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+
+      - name: Resolve image tag
+        id: resolve_tag
+        uses: azure/powershell@v3
+        with:
+          azPSVersion: latest
+          inlineScript: |
+            ./asgerthyregoddk/.github/scripts/fetch_latest_image_version.ps1 `
+              -acrUrl "tgclzdevacr.azurecr.io" `
+              -imageName "tgc-atdk-app" `
+              -inputTag "${{ github.event.inputs.version || 'latest' }}"
+
+      - name: Render manifests
+        run: |
+          helm template backend ./helm \
+            -f ./helm/values-prd.yaml \
+            --set image.tag=${{ steps.resolve_tag.outputs.IMAGE_TAG }} \
+            --output-dir ./deployment/prd
+        working-directory: asgerthyregoddk
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+          -backend-config=resource_group_name="${{ secrets.ASGERTHYREGODDK_DEV_TFSTATE_RESOURCE_GROUP_NAME }}" \
+          -backend-config=storage_account_name="${{ secrets.ASGERTHYREGODDK_DEV_TFSTATE_STORAGE_ACCOUNT_NAME }}" \
+          -backend-config=container_name="${{ secrets.ASGERTHYREGODDK_DEV_TFSTATE_STORAGE_CONTAINER_NAME }}" \
+          -backend-config=key="asgerthyregoddk.deployment.prd"
+        working-directory: asgerthyregoddk/terraform/deployment
+          
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: asgerthyregoddk/terraform/deployment
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -input=false -var-file="envs/vars.prd.tfvars" -out=tfplan
+        working-directory: asgerthyregoddk/terraform/deployment
+
+      - name: Terraform Apply
+        if: github.event.inputs.applyTF == 'true'
+        run: terraform apply -auto-approve tfplan
+        working-directory: asgerthyregoddk/terraform/deployment
+
+      - name: Commit rendered manifests
+        run: |
+          cd argocd && git pull
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add .
+          git diff --cached --quiet || git commit -m "[TGC.AsgerThyregodDK] chore: render prd manifests [${{ steps.resolve_tag.outputs.IMAGE_TAG }}]"
+          git push

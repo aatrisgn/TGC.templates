@@ -1,0 +1,121 @@
+name: Build images
+concurrency:
+  group: ${{ github.workflow }}
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+    - 'src/**'
+    - '.github/workflows/build_image.yml'
+  pull_request:
+    branches: ["main"]
+    paths:
+    - 'src/**'
+    - '.github/workflows/build_image.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  tag_commit:
+    runs-on: ubuntu-latest
+    name: Tag commit
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Generate version
+      id: version
+      shell: pwsh
+      run: ./.github/scripts/generate_version.ps1
+
+    - name: Tag commit
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag ${{ steps.version.outputs.version }}
+        git push origin ${{ steps.version.outputs.version }}
+    
+  build_web_app_job:
+    needs: [tag_commit]
+    runs-on: ubuntu-24.04-arm
+    name: Build Web App and deploy to ACR
+    environment: dev
+    env:
+      image_name: tgc-regnerdetnu-app
+      app_path: src/webapp
+      acr_registry: tgclzdevacr.azurecr.io
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: 'Az CLI login'
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.REGNERDETNU_DEV_CLIENT_ID }}
+        tenant-id: ${{ secrets.REGNERDETNU_DEV_TENANT_ID }}
+        subscription-id: ${{ secrets.REGNERDETNU_DEV_SUBSCRIPTION_ID }}
+
+    - name: Login to ACR
+      run: az acr login --name tgclzdevacr.azurecr.io
+
+    - name: Build and publish webapp to ACR
+      run: |
+        docker buildx build . \
+          --platform linux/amd64,linux/arm64 \
+          --tag $acr_registry/$image_name:${{ needs.tag_commit.outputs.version }} \
+          --tag $acr_registry/$image_name:latest \
+          --push
+      working-directory: ${{ env.app_path }}
+
+  build_web_api_job:
+    needs: [tag_commit]
+    runs-on: ubuntu-latest
+    name: Build Web API and deploy to ACR
+    environment: dev
+    env:
+      image_name: tgc-regnerdetnu-api
+      app_path: src/TGC.RegnerDetNu
+      acr_registry: tgclzdevacr.azurecr.io
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: 'Az CLI login'
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.REGNERDETNU_DEV_CLIENT_ID }}
+        tenant-id: ${{ secrets.REGNERDETNU_DEV_TENANT_ID }}
+        subscription-id: ${{ secrets.REGNERDETNU_DEV_SUBSCRIPTION_ID }}
+
+    - name: Login to ACR
+      run: az acr login --name tgclzdevacr.azurecr.io
+
+    - name: Build and publish webapi to ACR
+      run: |
+        docker buildx build . \
+          --platform linux/amd64,linux/arm64 \
+          --tag $acr_registry/$image_name:${{ needs.tag_commit.outputs.version }} \
+          --tag $acr_registry/$image_name:latest \
+          --push
+      working-directory: ${{ env.app_path }}
+
