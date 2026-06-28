@@ -81,6 +81,7 @@ jobs:
           repository: aatrisgn/TGC.ArgoCD
           token: ${{ secrets.github_argo_token }}
           path: argocd
+          ref: main
 
       - name: Fetch latest image version
         uses: aatrisgn/TGC.Templates/actions/fetch_latest_image_version@main
