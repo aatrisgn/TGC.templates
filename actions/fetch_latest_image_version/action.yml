@@ -20,7 +20,7 @@ runs:
       with:
         azPSVersion: latest
         inlineScript: |
-          ./asgerthyregoddk/.github/scripts/fetch_latest_image_version.ps1 `
+          ${{ github.action_path }}/fetch_latest_image_version.ps1 `
             -registryNamespace "${{ inputs.registry }}" `
             -imageName "${{ inputs.imageName }}" `
             -inputTag "${{ inputs.inputTag }}"
