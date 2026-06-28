@@ -56,7 +56,6 @@ on:
       
 jobs:
   generate_manifests:
-    # if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
     runs-on: ubuntu-latest
     name: Generate K8 manifests
     env:
@@ -94,18 +93,6 @@ jobs:
           imageName: "${{ inputs.image_name }}"
           registry: "${{ inputs.container_registry }}"
 
-      # # TODO: Rewrite this
-      # - name: Resolve image tag
-      #   id: resolve_tag
-      #   uses: azure/powershell@v3
-      #   with:
-      #     azPSVersion: latest
-      #     inlineScript: |
-      #       ./asgerthyregoddk/.github/scripts/fetch_latest_image_version.ps1 `
-      #         -registryNamespace "crn-shared-prd-scr-lz-fr-par" `
-      #         -imageName "tgc-atdk-app" `
-      #         -inputTag "${{ github.event.inputs.version || 'latest' }}"
-
       - name: Render manifests
         run: |
           helm template backend ./helm \
@@ -118,7 +105,7 @@ jobs:
         run: |
           terraform init \
           -backend-config=access_key="${{ secrets.state_access_key }}" \
-          -backend-config=secret_key="${{ secrets.state_secret_key }}" \
+          -backend-config=secret_key="${{ secrets.state_secret_access_key }}" \
           -backend-config=bucket="${{ secrets.state_bucket_name }}" \
           -backend-config=key="${{ inputs.state_key }}.tfstate"
         working-directory: ${{ inputs.working_directory }}
@@ -144,5 +131,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add .
-          git diff --cached --quiet || git commit -m "[${{ inputs.application_repo }}] chore: render dev manifests [${{ steps.resolve_tag.outputs.IMAGE_TAG }}]"
+          git diff --cached --quiet || git commit -m "[${{ inputs.application_repo }}] chore: render dev manifests [${{ steps.resolve_tag.outputs.image_version }}]"
           git push
