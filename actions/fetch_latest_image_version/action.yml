@@ -11,6 +11,11 @@ inputs:
   registry:
     description: Container registry URL
     required: false
+outputs:
+  version:
+    description: The fetched container version
+    value: ${{ steps.resolve_tag.outputs.IMAGE_TAG }}
+
 runs:
   using: composite
   steps:
