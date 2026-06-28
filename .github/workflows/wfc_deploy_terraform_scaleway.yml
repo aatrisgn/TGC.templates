@@ -59,7 +59,7 @@ jobs:
         -backend-config=access_key="${{ secrets.state_access_key }}" \
         -backend-config=secret_key="${{ secrets.state_secret_access_key }}" \
         -backend-config=bucket="${{ secrets.state_bucket_name }}" \
-        -backend-config=key="${{ inputs.state_key }}"
+        -backend-config=key="${{ inputs.state_key }}.tfstate"
         
     - name: Terraform Validate
       run: terraform validate
