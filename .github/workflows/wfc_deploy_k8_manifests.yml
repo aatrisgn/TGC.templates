@@ -48,7 +48,7 @@ on:
         required: true
       state_bucket_name:
         required: true
-      github_token:
+      github_argo_token:
         required: true
       
 jobs:
