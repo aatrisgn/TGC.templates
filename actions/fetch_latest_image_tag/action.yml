@@ -2,6 +2,7 @@ name: Install Scaleway CLI
 description: Installs the Scaleway CLI
 inputs:
   inputTag:
+    description: Tag of the image to fetch
     required: true
     default: latest
   imageName:
