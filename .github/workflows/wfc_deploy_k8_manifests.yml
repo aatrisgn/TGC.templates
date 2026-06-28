@@ -73,7 +73,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          path: ${{ github.event.inputs.application_repo }}
+          path: ${{ inputs.application_repo }}
 
       - name: Checkout ArgoCD repo
         uses: actions/checkout@v4
