@@ -12,7 +12,7 @@ inputs:
     description: Container registry URL
     required: false
 outputs:
-  version:
+  image_version:
     description: The fetched container version
     value: ${{ steps.resolve_tag.outputs.IMAGE_TAG }}
 

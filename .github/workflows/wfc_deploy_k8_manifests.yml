@@ -107,7 +107,7 @@ jobs:
         run: |
           helm template backend ./helm \
             -f ${{ inputs.helm_input_values_file }} \
-            --set image.tag=${{ steps.resolve_tag.outputs.IMAGE_TAG }} \
+            --set image.tag=${{ steps.resolve_tag.outputs.image_version }} \
             --output-dir ${{ inputs.helm_output_dir }}
         working-directory: ${{ inputs.application_repo }}
 
