@@ -79,10 +79,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: aatrisgn/TGC.ArgoCD
-          token: ${{ secrets.github_token }}
+          token: ${{ secrets.github_argo_token }}
           path: argocd
 
-      - name: Install Scaleway CLI
+      - name: Fetch latest image version
         uses: aatrisgn/TGC.Templates/actions/fetch_latest_image_version@main
         id: resolve_tag
         with:
