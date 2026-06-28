@@ -1,0 +1,8 @@
+name: Install Scaleway CLI
+description: Installs the Scaleway CLI
+runs:
+  using: composite
+  steps:
+    - name: Install Scaleway CLI
+      shell: bash
+      run: ${{ github.action_path }}/install_scaleway.sh

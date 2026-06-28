@@ -1,0 +1,8 @@
+name: Install Terraform
+description: Installs Terraform
+runs:
+  using: composite
+  steps:
+    - name: Install Terraform
+      shell: bash
+      run: ${{ github.action_path }}/install_terraform.sh

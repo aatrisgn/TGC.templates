@@ -1,0 +1,73 @@
+
+# .github/workflows/build.yml in shared repo
+name: Deploy Scaleway Terraform
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        required: true
+        type: string
+      applyTF:
+        required: true
+        type: string
+      var_file_path:
+        required: true
+        type: string
+      state_key:
+        required: true
+        type: string
+
+    secrets:
+      organization_id:
+        required: true
+      deployment_access_key:
+        required: true
+      deployment_secret_access_key:
+        required: true
+      state_access_key:
+        required: true
+      state_secret_access_key:
+        required: true
+      state_bucket_name:
+        required: true
+
+jobs:
+  build_job:
+    runs-on: ubuntu-latest
+    name: Deploy infrastructure
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    
+    env:
+      SCW_ACCESS_KEY: ${{ secrets.deployment_access_key }} 
+      SCW_SECRET_KEY: ${{ secrets.deployment_secret_access_key }}
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install Terraform
+      uses: aatrisgn/TGC.Templates/actions/install_terraform@main
+
+    - name: Terraform Fmt
+      run: terraform fmt -check
+
+    - name: Terraform Init
+      run: |
+        terraform init \
+        -backend-config=access_key="${{ secrets.state_access_key }}" \
+        -backend-config=secret_key="${{ secrets.state_secret_access_key }}" \
+        -backend-config=bucket="${{ secrets.state_bucket_name }}" \
+        -backend-config=key="${{ inputs.state_key }}"
+        
+    - name: Terraform Validate
+      run: terraform validate
+
+    - name: Terraform Plan
+      id: plan
+      run: terraform plan -input=false -var-file="${{ inputs.var_file_path }}" -var=organization_id="${{ secrets.organization_id }}" -out=tfplan
+
+    - name: Terraform Apply
+      if: ${{ inputs.applyTF == 'true' }}
+      run: terraform apply -auto-approve tfplan

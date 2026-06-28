@@ -1,0 +1,25 @@
+name: Install Scaleway CLI
+description: Installs the Scaleway CLI
+inputs:
+  inputTag:
+    required: true
+    default: latest
+  imageName:
+    description: Name of the image
+    required: true
+  registry:
+    description: Container registry URL
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Resolve image tag
+      id: resolve_tag
+      uses: azure/powershell@v3
+      with:
+        azPSVersion: latest
+        inlineScript: |
+          ./asgerthyregoddk/.github/scripts/fetch_latest_image_version.ps1 `
+            -registryNamespace "${{ inputs.registry }}" `
+            -imageName "${{ inputs.imageName }}" `
+            -inputTag "${{ inputs.inputTag }}"
