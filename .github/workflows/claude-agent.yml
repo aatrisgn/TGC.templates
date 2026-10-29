@@ -1,0 +1,66 @@
+# Lives in <org>/agent-workflows. Tag releases (v1, v2, ...) and reference the tag from callers.
+name: Claude agent
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        type: string
+        default: ubuntu-latest
+      dotnet-version:
+        description: Leave empty to use the repo's global.json
+        type: string
+        default: ''
+      setup-dotnet:
+        type: boolean
+        default: true
+      node-version:
+        description: Leave empty to skip Node setup
+        type: string
+        default: ''
+      max-turns:
+        type: number
+        default: 80
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: true
+      AGENT_APP_PRIVATE_KEY:
+        required: true
+
+jobs:
+  claude:
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 60
+    steps:
+      # Short-lived token for the agent's own GitHub App, scoped to this one repo.
+      - name: Mint repo-scoped token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - if: inputs.setup-dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+          global-json-file: ${{ inputs.dotnet-version == '' && 'global.json' || '' }}
+
+      - if: inputs.node-version != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - uses: anthropics/claude-code-action@v1   # pin to a commit SHA once stable
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          label_trigger: claude
+          claude_args: >-
+            --max-turns ${{ inputs.max-turns }}
+            --allowedTools "Bash(dotnet restore:*),Bash(dotnet build:*),Bash(dotnet test:*),Bash(dotnet format:*),Bash(npm ci),Bash(npm run:*),Bash(npm test:*),Bash(gh pr create:*),Bash(gh pr ready:*),Bash(gh pr view:*)"
