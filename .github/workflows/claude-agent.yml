@@ -24,7 +24,7 @@ on:
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
-      AGENT_APP_PRIVATE_KEY:
+      APP_PRIVATE_KEY:
         required: true
 
 jobs:
